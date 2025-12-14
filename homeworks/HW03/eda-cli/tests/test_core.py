@@ -21,6 +21,15 @@ def _sample_df() -> pd.DataFrame:
         }
     )
 
+def _second_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "user_id": [1, 2, 3, 4, 5],
+            "age": [0, 15, 0, 43, 0],
+            "happiness": [0.78, None, None, None, 0.11]
+        }
+    )
+
 
 def test_summarize_dataset_basic():
     df = _sample_df()
@@ -44,7 +53,7 @@ def test_missing_table_and_quality_flags():
     assert missing_df.loc["age", "missing_count"] == 1
 
     summary = summarize_dataset(df)
-    flags = compute_quality_flags(summary, missing_df)
+    flags = compute_quality_flags(summary, missing_df, df)
     assert 0.0 <= flags["quality_score"] <= 1.0
 
 
@@ -59,3 +68,15 @@ def test_correlation_and_top_categories():
     city_table = top_cats["city"]
     assert "value" in city_table.columns
     assert len(city_table) <= 2
+
+def test_latest_created_heuristics():
+    df = _second_df()
+
+    missing_df = missing_table(df)
+    summary = summarize_dataset(df)
+    flags = compute_quality_flags(summary, missing_df, df)
+
+    assert flags["has_suspicious_id_duplicates"] == False
+    assert flags["too_many_missing"] == True
+    assert flags["too_many_zero_values"] == True
+

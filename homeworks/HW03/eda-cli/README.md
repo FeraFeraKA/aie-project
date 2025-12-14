@@ -52,6 +52,20 @@ uv run eda-cli report data/example.csv --out-dir reports
 - `missing_matrix.png` – визуализация пропусков;
 - `correlation_heatmap.png` – тепловая карта корреляций.
 
+Параметры (дополнительно к overview)
+
+- `--title` - заголовок отчёта (по умолчанию `Общий большой EDA-отчёт для набора данных`)
+- `--min-missing-share` - порог пропусков, при котором колонка считается проблемной (по умолчанию `0.03`).
+- `--graphics/--no-graphics` - необходимо ли создавать графики для отчёта (по умолчанию `--graphics`)
+- `--help` - показывает список возможных команд
+
+Примеры запуска:
+```bash
+uv run eda-cli report data/example.csv --out-dir reports --min-missing-share 0.01 --no-graphics
+uv run eda-cli report data/example.csv --out-dir reports --title Это очень важный отчёт
+uv run eda-cli report --help
+```
+
 ## Тесты
 
 ```bash

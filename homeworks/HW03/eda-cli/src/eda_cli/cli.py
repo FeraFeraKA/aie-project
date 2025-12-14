@@ -67,6 +67,9 @@ def report(
     sep: str = typer.Option(",", help="Разделитель в CSV."),
     encoding: str = typer.Option("utf-8", help="Кодировка файла."),
     max_hist_columns: int = typer.Option(6, help="Максимум числовых колонок для гистограмм."),
+    title: str = typer.Option("Общий большой EDA-отчёт для набора данных", help="Заголовок отчёта"),
+    min_missing_share: float = typer.Option(0.03, help="Порог пропусков для отделения колонки"),
+    enabled_graphics: bool = typer.Option(True, "--graphics/--no-graphics", help="Возможность отключения создания графиков")
 ) -> None:
     """
     Сгенерировать полный EDA-отчёт:
@@ -74,7 +77,8 @@ def report(
     - статистика пропусков;
     - корреляционная матрица;
     - top-k категорий по категориальным признакам;
-    - картинки: гистограммы, матрица пропусков, heatmap корреляции.
+    - картинки: гистограммы, матрица пропусков, heatmap корреляции;
+    - отделение колонок с определённым количеством пропусков.
     """
     out_root = Path(out_dir)
     out_root.mkdir(parents=True, exist_ok=True)
@@ -87,9 +91,10 @@ def report(
     missing_df = missing_table(df)
     corr_df = correlation_matrix(df)
     top_cats = top_categories(df)
+    problematic_columns = summary_df[summary_df["missing_share"] >= min_missing_share]
 
     # 2. Качество в целом
-    quality_flags = compute_quality_flags(summary, missing_df)
+    quality_flags = compute_quality_flags(summary, missing_df, df)
 
     # 3. Сохраняем табличные артефакты
     summary_df.to_csv(out_root / "summary.csv", index=False)
@@ -97,12 +102,15 @@ def report(
         missing_df.to_csv(out_root / "missing.csv", index=True)
     if not corr_df.empty:
         corr_df.to_csv(out_root / "correlation.csv", index=True)
+    if not problematic_columns.empty:
+        problematic_columns.to_csv(out_root / "missing_columns.csv", index=True)
+    
     save_top_categories_tables(top_cats, out_root / "top_categories")
 
     # 4. Markdown-отчёт
     md_path = out_root / "report.md"
     with md_path.open("w", encoding="utf-8") as f:
-        f.write(f"# EDA-отчёт\n\n")
+        f.write(f"# {title}\n\n")
         f.write(f"Исходный файл: `{Path(path).name}`\n\n")
         f.write(f"Строк: **{summary.n_rows}**, столбцов: **{summary.n_cols}**\n\n")
 
@@ -111,7 +119,11 @@ def report(
         f.write(f"- Макс. доля пропусков по колонке: **{quality_flags['max_missing_share']:.2%}**\n")
         f.write(f"- Слишком мало строк: **{quality_flags['too_few_rows']}**\n")
         f.write(f"- Слишком много колонок: **{quality_flags['too_many_columns']}**\n")
-        f.write(f"- Слишком много пропусков: **{quality_flags['too_many_missing']}**\n\n")
+        f.write(f"- Слишком много пропусков: **{quality_flags['too_many_missing']}**\n")
+        f.write(f"- Слишком много нулевых значений: **{quality_flags['too_many_zero_values']}**\n")
+        f.write(f"- Макс. доля нулевых значений: **{quality_flags['max_zero_values']}**\n")
+        f.write(f"- Макс. количество пропусков: **{quality_flags['max_missing_count']}**\n")
+        f.write(f"- Подозрительные дубликаты в user_id: **{quality_flags['has_suspicious_id_duplicates']}**\n\n")
 
         f.write("## Колонки\n\n")
         f.write("См. файл `summary.csv`.\n\n")
@@ -134,18 +146,26 @@ def report(
         else:
             f.write("См. файлы в папке `top_categories/`.\n\n")
 
+        f.write(f"## Проблемные колонки (доля пропусков больше или равна **{min_missing_share}**)\n\n")
+        if problematic_columns.empty:
+            f.write("Проблемных колонок нет.\n\n")
+        else:
+            f.write("См. `missing_columns.csv`.\n\n")
+        
         f.write("## Гистограммы числовых колонок\n\n")
         f.write("См. файлы `hist_*.png`.\n")
 
     # 5. Картинки
-    plot_histograms_per_column(df, out_root, max_columns=max_hist_columns)
-    plot_missing_matrix(df, out_root / "missing_matrix.png")
-    plot_correlation_heatmap(df, out_root / "correlation_heatmap.png")
+    if enabled_graphics:
+        plot_histograms_per_column(df, out_root, max_columns=max_hist_columns)
+        plot_missing_matrix(df, out_root / "missing_matrix.png")
+        plot_correlation_heatmap(df, out_root / "correlation_heatmap.png")
 
     typer.echo(f"Отчёт сгенерирован в каталоге: {out_root}")
     typer.echo(f"- Основной markdown: {md_path}")
     typer.echo("- Табличные файлы: summary.csv, missing.csv, correlation.csv, top_categories/*.csv")
-    typer.echo("- Графики: hist_*.png, missing_matrix.png, correlation_heatmap.png")
+    if enabled_graphics:
+        typer.echo("- Графики: hist_*.png, missing_matrix.png, correlation_heatmap.png")
 
 
 if __name__ == "__main__":
